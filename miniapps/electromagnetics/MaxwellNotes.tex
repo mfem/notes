@@ -1,0 +1,368 @@
+\documentclass[12pt]{article}
+\usepackage{amsmath}
+
+\providecommand{\B}{\mbox{\bf B}}
+\providecommand{\E}{\mbox{\bf E}}
+\providecommand{\D}{\mbox{\bf D}}
+\renewcommand{\H}{\mbox{\bf H}}
+\providecommand{\J}{\mbox{\bf J}}
+\providecommand{\M}{\mbox{\bf M}}
+\providecommand{\F}{\mbox{\bf F}}
+\providecommand{\W}{\mbox{\bf W}}
+\providecommand{\sE}{\overline{\sigma}}
+\providecommand{\sM}{\overline{\sigma}_M}
+\providecommand{\x}{\vec{x}}
+
+\newcommand{\refEq}[1]{(\ref{eq:#1})}
+\newcommand{\refSec}[1]{Section~\ref{sec:#1}}
+\newcommand{\Div}{\nabla\cdot}
+\newcommand{\Curl}{\nabla\times}
+\newcommand{\Grad}{\nabla}
+
+\title{Overview of the Maxwell Miniapp in MFEM}
+\author{Mark L. Stowell}
+
+\begin{document}
+
+\maketitle
+
+\section{Maxwell's Equations}
+
+\begin{eqnarray}
+\Curl\H & = &  \frac{\partial\D}{\partial t} + \J + \sE\E\label{eq:ampere}\\
+\Curl\E & = & -\frac{\partial\B}{\partial t} - \M - \sM\H\label{eq:faraday}\\
+\Div\D & = & \rho\label{eq:gauss}\\
+\Div\B & =  & 0\label{eq:trans}
+\end{eqnarray}
+
+With electric current density, $\J$, magnetic current density,
+$\M$, electric conductivity, $\sE$, magnetic
+conductivity, $\sM$, and electric charge density,
+$\rho$. We will sometimes refer to these equations by the names
+Amp\`ere's Law, Faraday's Law, Guass' Law, and the Transversality
+Condition respectively. It is also necessary to define the constitutive
+relations $\D\equiv\epsilon\E$ and
+$\B\equiv\mu\H$.
+
+It is also common to combine equations~\refEq{ampere} and
+\refEq{faraday} into a single second order PDE.
+\begin{align}
+\frac{\partial^2\left(\epsilon\E\right)}{\partial t^2}
++ \frac{\partial\left(\sE\E\right)}{\partial t}
++ \Curl\left(\mu^{-1}\Curl\E\right) & \nonumber \\
++ \Curl\left(\mu^{-1}\sM\H\right) &
+=
+-\frac{\partial\J}{\partial t}
+- \Curl\left(\mu^{-1}\M\right)
+\label{eq:curlcurle}
+%\end{align}
+\mbox{or}&\\
+%\begin{equation}
+\frac{\partial^2\left(\mu\H\right)}{\partial t^2}
++ \frac{\partial\left(\sM\H\right)}{\partial t}
++ \Curl\left(\epsilon^{-1}\Curl\H\right) & \nonumber \\
+- \Curl\left(\epsilon^{-1}\sE\E\right) &
+=
+-\frac{\partial\M}{\partial t}
++\Curl\left(\epsilon^{-1}\J\right)
+\label{eq:curlcurlh}
+\end{align}
+One drawback of these formulations is the appearance of $\H$ in
+equation~\refEq{curlcurle} or $\E$ in equation~\refEq{curlcurlh}. The
+only way to formulate these equations entirely in terms of $\E$ or
+$\H$ is to make assumptions about the spatial variation of
+$\epsilon^{-1}\sE$ or $\mu^{-1}\sM$. For this reason these second
+order formulations should be avoided unless $\sM=0$ or $\sE=0$.
+
+\section{Discretization}
+\subsection{Basis Functions}
+
+There are two sets of basis functions particularly well suited for
+electromagnetics; Nedelec and Raviart-Thomas. The Nedelec basis
+functions guarantee tangential continuity of their approximations
+across element interfaces. This makes them well suited for the fields
+$\E$ and $\H$ which share this constraint on material interfaces. The
+Raviart-Thomas basis functions guarantee continuity of the normal
+component of their approximations across element interfaces. This
+makes them well suited for the fields $\B$ and $\D$ which share this
+constraint on material interfaces.
+
+The Nedelec basis functions which discretize the H(Curl) space are
+indispensable due to the presence of the Curl operators in
+equations~\refEq{ampere}, \refEq{faraday}, \refEq{curlcurle}, and
+\refEq{curlcurlh}. The Raviart-Thomas basis functions which discretize
+the H(Div) space are convenient and reduce the computational cost but
+are optional, strictly speaking.
+
+\subsection{Discretization of the primary fields}
+
+There are three choices for discretizing the set of coupled first
+order partial differential equations:
+\begin{itemize}
+\item[{\bf EB:}] $\E\in$ H(Curl) and $\B,\J,\M\in$ H(Div)
+\item[{\bf DH:}] $\H\in$ H(Curl) and $\D,\J,\M\in$ H(Div)
+\item[{\bf EH:}] $\E\in$ H(Curl), $\H\in$ H(Curl), and $\J,\M\in$
+  H(Curl) (grudgingly)
+\end{itemize}
+There is only one choice for discretizing the second order equations
+i.e. $\E$ or $\H$ in H(Curl).
+
+%% Their properties can be summarized as follows:
+
+%% \begin{tabular}{c|cccc}
+%%   & {\bf Amp\`ere's Law} & {\bf Faraday's Law}
+%%   & {\bf Gauss's Law} & {\bf Transversality} \\
+%%   \hline
+%%   {\bf EB} & Approx. & Exact   & Approx.$^\dagger$ & Exact   \\
+%%   {\bf DH} & Exact   & Approx. & Exact   & Approx.$^\dagger$ \\
+%%   {\bf EH} & Approx. & Approx. & Approx.$^\dagger$ & Approx.$^\dagger$ \\
+%% \end{tabular}
+
+%% $\dagger$ Requires post-processing.
+
+These basis function choices merely ensure that the approximate fields
+maintain the proper interface constraints at material boundaries. The
+choice of formulation can be made based on the required sources,
+boundary conditions, and/or post-processing requirements. Hence,
+different physical requirements can lead to different choices of
+formulation i.e. there is no single best choice for all problems.
+
+\subsection{Discretization of $\J$ and $\M$}
+
+\label{sec:JM}
+
+The electric and magnetic current source densities are both flux
+vectors and as such they are best represented using the H(Div)
+space. This is most apparent when modeling the eddy current equation
+but H(Div) can be important in wave equations as well. Imagine
+modeling a current carrying conductor surrounded by some insulating
+material. The current density $\J$ may be non-zero inside the
+conductor but it should be identically zero outside of it. Assuming
+the computational mesh conforms to the surface of this conductor, an
+H(Div) field can can accurately represent such a current flow as long
+as the current at the surface of the conductor remains parallel to
+that surface. In other words the current will not ``leak'' out of the
+conductor as long as the normal component of the current is zero at
+the surface. On the other hand, if H(Curl) basis functions were used
+for $\J$ its tangential components would need to be continuous across
+the surface of the conductor. This produces a non-physical current
+within the first layer of elements surrounding the conductor.
+
+Non-physical currents leaking out of conductors when using H(Curl)
+basis functions for the current density $\J$ can lead to inaccurate
+eddy current simulations either by producing a larger than expected
+magnetic field outside the conductor or a reduced thermal heat load
+within the conductor. Similarly, in wave simulations the total power
+emanating from an antenna can be either over- or under-estimated
+depending upon how $\J$ is computed on the surface of the
+antenna. Such matters can be eliminated by simply representing $\J$ as
+an H(Div) function. I'm sure similar arguments can be made for the
+magnetization $\M$ although I have less experience with that.
+
+\section{The {\tt maxwell} Miniapp}
+
+The {\tt maxwell} Miniapp uses the {\bf EB} formulation with $\sM$ and
+$\M$ assumed to be zero. It evolves the first order coupled system of
+equations using a symplectic time integration algorithm by Candy and
+Rozmus described in ``A Symplectic Integration Algorithm for Separable
+Hamiltonian Functions'', Journal of Computational Physics, Vol. 92,
+pages 230-256 (1991). The main advantage of this algorithm is that it
+conserves energy. Another advantage is that the approximations of $\E$
+and $\B$ correspond to the same simulation time rather than being
+staggered as in other methods.
+
+The variable order symplectic integration class in MFEM called {\tt
+  SIAVSolver} requires that we implement our coupled set of PDEs as a
+pair of operators. The first is an {\tt Operator} which can be used to
+update the magnetic field, $\B$, using Faraday's Law by computing
+$-\Curl\E$. The second is a {\tt TimeDependentOperator} which can be
+used to update the electric field, $\E$, using Amp\`ere's Law by
+computing $\Curl\left(\mu^{-1}\B\right)-\J-\sE\E$. We choose to
+implement both of these operators in a single class which we call {\tt
+  MaxwellSolver}.
+
+The first operator, $-\Curl\E$, acts on $\E\in$ H(Curl) to produce a
+result $\frac{\partial\B}{\partial t}\in$ H(Div). By design our
+discrete representation of H(Div) contains the curl of any field in
+our discrete representation of H(curl).  Consequently we can compute
+this operator by simply evaluating the curl of our H(Curl) basis
+functions in terms of our H(Div) basis functions. This evaluation is
+handled by a {\tt DiscreteInterpolator} called {\tt
+  CurlInterpolator}. The process of looping over each element to
+compute these interpolations is conducted by the the {\tt
+  ParDiscreteLinearOperator}. In the {\tt MaxwellSolver} this curl
+operator is simply named {\tt Curl\_} and its negative, needed by the
+{\tt SIAVSolver}, is named {\tt NegCurl\_}. These operators are setup
+between lines 227 and 236 of the file {\tt maxwell\_solver.cpp}.
+
+The second operator, $\Curl\left(\mu^{-1}\B\right)-\J-\sE\E$, requires
+a bit more effort. The first thing to notice is that we cannot compute
+the curl of $\mu^{-1}\B$ precisely. Primarily this is due to the fact
+that $\B\in$ H(Div) rather than H(Curl) but, in general, the presence
+of $\mu^{-1}$ is also a problem since we don't know its derivatives at
+all. These complications require that we compute the curl operator in
+a weak sense.
+
+\subsection{Setup of the {\tt TimeDependentOperator}}
+
+\subsubsection{Weak curl of $\mu^{-1}\B$}
+
+Often in wave propagation $\mu$ is assumed to be constant but we will
+not make this assumption. In principle $\mu$ could be anisotropic and
+inhomogeneous although we do assume it is constant in time. The
+magnetic field $\B$ will be written as a linear combination of basis
+functions in H(Div) which we will label as $\F_i$
+e.g. $\B(\x)\approx\sum_i b_i(t)\F_i(\x)$.
+
+Our goal is to compute $\frac{\partial\E}{\partial t}$ where $\E\in$
+H(Curl) so we need to represent $\Curl\mu^{-1}\B$ also in H(Curl).
+The basis functions of H(Curl) will be labeled as $\W_i$. To compute
+the weak form of this term we multiply the operator of interest by
+each of our H(Curl) basis functions and integrate over the entire
+problem domain to obtain an equation corresponding to each basis
+function in H(Curl). For example
+\begin{eqnarray*}
+  \int_\Omega\W_i(\x)\cdot\left[\Curl\left(\mu^{-1}\B\right)\right]\,d\Omega
+  &=& \int_\Omega\W_i(\x)\cdot\left[\Curl\left(\mu^{-1}\sum_jb_j\F_j(\x)\right)\right]\,d\Omega\\
+  &=& \sum_jb_j\left\{\int_\Omega\W_i(\x)\cdot\left[\Curl\left(\mu^{-1}\F_j(\x)\right)\right]\,d\Omega\right\}
+\end{eqnarray*}
+The expression in curly braces depends only on our material
+coefficient and our basis functions so we can precompute this if we
+assume $\mu$ does not change in time. This particular integral
+requires a little more manipulation to move the curl operator onto the
+H(Curl) basis function.
+\begin{eqnarray*}
+  \int_\Omega\W_i(\x)\cdot\left[\Curl\left(\mu^{-1}\F_j(\x)\right)\right]\,d\Omega &=&
+  \int_\Omega\left(\Curl\W_i(\x)\right)\cdot\left(\mu^{-1}\F_j(\x)\right)\,d\Omega \\
+  &-&  \int_\Omega\Div\left[\W_i(\x)\times\left(\mu^{-1}\F_j(\x)\right)\right]\,d\Omega \\
+  &=&
+  \int_\Omega\left(\mu^{-T}\Curl\W_i(\x)\right)\cdot\F_j(\x)\,d\Omega \\
+  &-&  \int_\Gamma\hat{n}\cdot\left[\W_i(\x)\times\left(\mu^{-1}\F_j(\x)\right)\right]\,d\Gamma \\
+  &=&
+  \int_\Omega\left(\mu^{-T}\Curl\W_i(\x)\right)\cdot\F_j(\x)\,d\Omega \\
+  &+&  \int_\Gamma\W_i(\x)\cdot\left[\hat{n}\times\left(\mu^{-1}\F_j(\x)\right)\right]\,d\Gamma
+\end{eqnarray*}
+Where $\mu^{-T}$ is the transpose of the inverse of $\mu$ and
+$\Gamma=\partial\Omega$ i.e. the boundary of the domain.
+
+The first integral remaining on the right hand side is the weak curl
+operator which is implemented in MFEM as a {\tt
+  BilinearFormIntegrator} named {\tt
+  MixedVectorWeakCurlIntegrator}\footnote{A list of the various {\tt
+    BilinearFormIntegrators} can be found at
+  https://mfem.org/bilininteg. More detailed descriptions can be found
+  in the files {\tt fem/biliniteg.[ch]pp}.}. This operator is
+setup between lines 178 and 184 of the file {\tt maxwell\_solver.cpp}.
+
+The boundary integral term shown above is ignored in the {\tt maxwell}
+miniapp which implies that it is assumed to be zero. This gives rise
+to a so-called natural boundary condition which in this case implies
+that $\hat{n}\times\H=0$. Any portion of the boundary where an
+essential (a.k.a. Dirichlet) boundary condition is set will override
+this implicit boundary condition. Alternatively an inhomogeneous
+Neumann boundary condition can be applied by providing a nonzero
+function in place of $\hat{n}\times\H$ in this integral. This would be
+accomplished by passing a known vector function to the {\tt
+  LinearFormIntegrator} named {\tt VectorFEDomainLFIntegrator} and
+using this as a boundary integrator in {\tt
+  ParLinearForm}. Unfortunately we don't seem to have an example of
+this usage in either of the {\tt tesla} or {\tt maxwell} miniapps.
+
+\subsubsection{Loss term $\sE\E$}
+
+This would seem to be a simple term but, of course, there is a
+complication. According to the Candy and Rozmus paper this piece of
+the Hamiltonian should not depend on $\E$. Furthermore, to properly
+model such a loss term it is best to handle it implicitly. To
+accomplish this the {\tt MaxwellSolver} stores the current value of
+the electric field internally since the {\tt SIAVSolver} will not
+provide this data to the update method (which is called {\tt
+  ImplicitSolve}). The integral needed to model this term simply
+computes the product of the H(Curl) basis functions against each other
+along with the material coefficient, $\sE$ in this case. This
+integrator is called {\tt VectorFEMassIntegrator}. The portion of this
+operator which will be used with the current value of the electric
+field is setup between lines 195 and 208 of the file {\tt
+  maxwell\_solver.cpp}. The implicit portion is setup between lines
+399 and 407 using the same integrator.
+
+\subsubsection{Current density $\J$}
+
+The {\tt maxwell} miniapp does not place $\J$ in H(Div) despite the
+comments in \refSec{JM}. The reason for this is that the {\tt maxwell}
+miniapp does not use a {\tt GridFunction} representation of $\J$ in
+any computations. It does, however, write $\J$ to its data files for
+visualization and this really should be done using an H(Div) field.
+
+The way the current density enters the wave equation is a source term
+which is computed using the following integral:
+\[
+\int_\Omega\W_i\cdot\J\,d\Omega
+\]
+This is accomplished by using the {\tt LinearFormIntegrator} named
+{\tt VectorFEDomainLFIntegrator} and a {\tt ParLinearForm} object. The
+setup of this object can be found between lines 264 and 266 of the
+file {\tt maxwell\_solver.cpp}. Integrals such as this, which directly
+evaluate a c-style function, avoid the continuity concerns raised in
+\refSec{JM}.
+
+\subsubsection{Setting up the solver}
+
+The time derivative in Amp\`ere's Law is of the form:
+\begin{equation*}
+  \frac{\partial\epsilon\E}{\partial t}
+  \approx \frac{\partial}{\partial t}\left(\epsilon\sum_ie(t)\W_i\right)
+  = \epsilon\sum_i\dot{e}(t)\W_i
+\end{equation*}
+Where we have assumed that $\epsilon$ is constant in time. For the
+weak form of Amp\`ere's we need to again multiply by the H(Curl) basis
+functions and integrate over the problem domain.
+\[
+\int_\Omega\W_i\cdot\left(\epsilon\sum_j\dot{e}(t)\W_j\right)\,d\Omega
+= \sum_j\dot{e}(t)\left\{\int_\Omega\W_i\cdot\left(\epsilon\W_j\right)\,d\Omega
+\right\}
+\]
+The integral in the curly braces is a mass matrix which is again
+computed using the {\tt BilinearFormIntegrator} named {\tt
+  VectorFEMassIntegrator}. This is setup between lines 388 and 395 of
+the file {\tt maxwell\_solver.cpp}.
+
+The more unusual part of this operator comes from the implicit
+handling of the loss term and the absorbing boundary condition. The
+latter is a simple Sommerfeld first order radiation boundary
+condition. Each of these implicit terms multiplies the electric field
+which we approximate at the time $t+\Delta t/2$.
+
+Each of these pieces bilinear forms which multiply the time derivative
+are mass matrices so a conjugate gradient iterative solver with a
+diagonal scaling preconditioner should work quite well. These are
+setup between lines 423 and 428 of the file {\tt maxwell\_solver.cpp}.
+
+One odd thing does appear in this {\tt setupSolver} member function
+(and a few other places) and that is the variable {\tt idt}. This is
+an integer related to the double precision time step {\tt dt}. The
+reason for this is that our variable order symplectic time integrator
+breaks up a time step into a handful of smaller time steps which are
+generally not the same size. If we need to handle loss terms implicitly
+this variable time step will appear in the matrix passed to our
+solver. Of course we don't want to rebuild this matrix every time the
+time step changes so we build and cache the matrices in a
+container. The integer {\tt idt} is simply the key used to access
+these cached matrices and the solvers that were setup to work with
+them.
+
+\subsection{Putting it all together}
+
+The only remaining thing to discuss is the way in which we use a
+combination of primal and dual vectors within the simulation
+code. However, it's hard to know what level of detail will be useful
+here. At this point I would recommend referring to our online
+documentation which can be found at https://mfem.org/pri-dual-vec/ for
+an overview of this concept.
+
+I would be happy to go into more detail and describe how and why we
+use these primal and dual vectors in the {\tt maxwell} miniapp. Please
+let me know if this would be useful and if there are any particular
+points of confusion.
+
+\end{document}

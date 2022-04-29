@@ -15,7 +15,7 @@ jobs:
 
   test2:
     runs-on: ubuntu-18.04
-    if: github.event_name != "push"
+    if: (github.event_name == 'pull_request')
     steps:
     - name: Print
       run: |

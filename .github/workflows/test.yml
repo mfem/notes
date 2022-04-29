@@ -7,7 +7,6 @@ on:
 jobs:
   test:
     runs-on: ubuntu-18.04
-    if: github.event_name != "pull_request"
     steps:
     - name: Do the test
       run: |

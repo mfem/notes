@@ -14,4 +14,4 @@ jobs:
            echo "::set-output name=foreign_pr::yes"
         else
            echo "::set-output name=foreign_pr::"
-
+	fi

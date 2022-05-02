@@ -5,14 +5,25 @@ on:
   pull_request:
 
 jobs:
+  run-once:
+    runs-on: ubuntu-18.04
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == 'mfem/mfem'
+    steps:
+      - name: Skip Local PRs
+        run: exit 0
+
   test1:
     runs-on: ubuntu-18.04
+    needs: run-once
     steps:
-    - name: Work
-      if: (github.event_name != 'pull_request') || (github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name)
+    - name: Work1
       run: |
-        echo "Do work"
-    - name: Skip
-      if: (github.event_name == 'pull_request') && (github.event.pull_request.head.repo.full_name == github.event.pull_request.base.repo.full_name)
+        echo "Do work1"
+
+  test2:
+    runs-on: ubuntu-18.04
+    needs: run-once
+    steps:
+    - name: Work2
       run: |
-        echo "Run from a local PR -- skip"
+        echo "Do work2"

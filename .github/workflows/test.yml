@@ -5,17 +5,16 @@ on:
   pull_request:
 
 jobs:
-  check:
+  run-once:
     runs-on: ubuntu-18.04
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
     steps:
       - name: Skip Local PRs
-        run: |
-          echo {{ github.event.pull_request.base.repo.full_name }} ; exit 0
+        run: exit 0
 
   test1:
     runs-on: ubuntu-18.04
-    needs: check
+    needs: run-once
     steps:
     - name: Work1
       run: |
@@ -23,7 +22,7 @@ jobs:
 
   test2:
     runs-on: ubuntu-18.04
-    needs: check
+    needs: run-once
     steps:
     - name: Work2
       run: |

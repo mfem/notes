@@ -10,8 +10,7 @@ jobs:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != 'mfem/mfem'
     steps:
       - name: Skip Local PRs
-        run: |
-          echo "Do work1"
+        run: exit 0
 
   test1:
     runs-on: ubuntu-18.04

@@ -7,7 +7,7 @@ on:
 jobs:
   run-once:
     runs-on: ubuntu-18.04
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == 'mfem/mfem'
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != 'mfem/mfem'
     steps:
       - name: Skip Local PRs
         run: exit 0

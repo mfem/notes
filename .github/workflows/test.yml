@@ -8,6 +8,9 @@ jobs:
   check:
     runs-on: ubuntu-18.04
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name
+    steps:
+      - name: Execute tests
+        run: exit 0
 
   test1:
     runs-on: ubuntu-18.04

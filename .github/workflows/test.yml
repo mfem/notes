@@ -1,17 +1,26 @@
 name: test
 
-env:
-local_PR: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name
-
 on:
   push:
   pull_request:
 
 jobs:
+  check:
+    runs-on: ubuntu-18.04
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name
+
   test1:
     runs-on: ubuntu-18.04
-    if: ${{ env.local_PR }}
+    needs: check
     steps:
-    - name: Work
+    - name: Work1
       run: |
-        echo "Do work"
+        echo "Do work1"
+
+  test2:
+    runs-on: ubuntu-18.04
+    needs: check
+    steps:
+    - name: Work2
+      run: |
+        echo "Do work2"

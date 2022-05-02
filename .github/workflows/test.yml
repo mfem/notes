@@ -1,9 +1,13 @@
 name: test
 
 on:
+  # Run on every push of the branch
   push:
-  pull_request:
 
+  # Never run or show up on any pull request!
+  pull_request:
+    branches-ignore:
+      - '*'
 jobs:
   run-once:
     runs-on: ubuntu-18.04

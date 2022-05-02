@@ -5,7 +5,7 @@ on:
   pull_request:
 
 jobs:
-  run-once:
+  check:
     runs-on: ubuntu-18.04
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != 'mfem/mfem'
     steps:
@@ -14,7 +14,7 @@ jobs:
 
   test1:
     runs-on: ubuntu-18.04
-    needs: run-once
+    needs: check
     steps:
     - name: Work1
       run: |
@@ -22,7 +22,7 @@ jobs:
 
   test2:
     runs-on: ubuntu-18.04
-    needs: run-once
+    needs: check
     steps:
     - name: Work2
       run: |
